@@ -429,7 +429,7 @@ function dind::ensure-network {
     local v6settings=""
     if [[ ${IP_MODE} = "ipv6" ]]; then
       # Need second network for NAT64
-      v6settings="--subnet=172.18.0.0/16 --ipv6"
+      v6settings="--subnet=172.19.0.0/16 --ipv6"
     fi
     docker network create ${v6settings} --subnet="${DIND_SUBNET}/${DIND_SUBNET_SIZE}" --gateway="${dind_ip_base}1" kubeadm-dind-net >/dev/null
   fi
@@ -497,18 +497,19 @@ function dind::ensure-nat {
         if ! docker ps | grep tayga >&/dev/null; then
             docker run -d --name tayga --hostname tayga --net kubeadm-dind-net --label mirantis.kubeadm_dind_cluster \
 		   --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv6.conf.all.forwarding=1 \
-		   --privileged=true --ip 172.18.0.200 --ip6 ${LOCAL_NAT64_SERVER} --dns ${REMOTE_DNS64_V4SERVER} --dns ${dns_server} \
-		   -e TAYGA_CONF_PREFIX=${DNS64_PREFIX_CIDR} -e TAYGA_CONF_IPV4_ADDR=172.18.0.200 \
+		   --privileged=true --ip 172.19.0.200 --ip6 ${LOCAL_NAT64_SERVER} --dns ${REMOTE_DNS64_V4SERVER} --dns ${dns_server} \
+		   -e TAYGA_CONF_PREFIX=${DNS64_PREFIX_CIDR} -e TAYGA_CONF_IPV4_ADDR=172.19.0.200 \
+		   -e TAYGA_CONF_DYNAMIC_POOL=172.19.0.128/25 \
 		   danehans/tayga:latest >/dev/null
 	    # Need to check/create, as "clean" may remove route
-	    local route="$(ip route | egrep "^172.18.0.128/25")"
+	    local route="$(ip route | egrep "^172.19.0.128/25")"
 	    if [[ -z "${route}" ]]; then
 		if [[ "${GCE_HOSTED}" = true ]]; then
-		    docker-machine ssh k8s-dind sudo ip route add 172.18.0.128/25 via 172.18.0.200
+		    docker-machine ssh k8s-dind sudo ip route add 172.19.0.128/25 via 172.19.0.200
     elif [[ -z ${using_linuxdocker} ]]; then
         :
 		else
-		    docker run --net=host --rm --privileged busybox ip route add 172.18.0.128/25 via 172.18.0.200
+		    docker run --net=host --rm --privileged busybox ip route add 172.19.0.128/25 via 172.19.0.200
 		fi
 	    fi
 	fi
@@ -734,6 +735,9 @@ function dind::init {
     if [[ ${IP_MODE} = "ipv6" ]]; then
       docker exec --privileged -i kube-master touch /v6-mode
     fi
+
+    echo "dind::init: IP_MODE:" $IP_MODE
+    echo "dind::init: POD_NETWORK_CIDR:" $POD_NETWORK_CIDR
 
     docker exec --privileged -i kube-master bash <<EOF
 sed -e "s|{{ADV_ADDR}}|${kube_master_ip}|" \
