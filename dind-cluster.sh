@@ -687,8 +687,7 @@ function dind::ensure-dashboard-clusterrolebinding {
 }
 
 function dind::deploy-dashboard {
-  dind::step "Deploying k8s dashboard - (TEMP CHANGE) Returning!!!"
-  return
+  dind::step "Deploying k8s dashboard"
   dind::retry "${kubectl}" apply -f "${DASHBOARD_URL}"
   # https://kubernetes-io-vnext-staging.netlify.com/docs/admin/authorization/rbac/#service-account-permissions
   # Thanks @liggitt for the hint
