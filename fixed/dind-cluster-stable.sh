@@ -50,7 +50,8 @@ if [[ $(uname) == Linux && -z ${DOCKER_HOST:-} ]]; then
     using_linuxdocker=1
 fi
 
-EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:stable
+#EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:stable
+EMBEDDED_CONFIG=y;DIND_IMAGE=diverdane/kubeadm-dind-cluster:dockernet-172.20.0.0
 
 IP_MODE="${IP_MODE:-ipv4}"  # ipv4, ipv6, (future) dualstack
 if [[ ! ${EMBEDDED_CONFIG:-} ]]; then
@@ -485,7 +486,7 @@ function dind::ensure-network {
     local v6settings=""
     if [[ ${IP_MODE} = "ipv6" ]]; then
       # Need second network for NAT64
-      v6settings="--subnet=172.18.0.0/16 --ipv6"
+      v6settings="--subnet=172.20.0.0/16 --ipv6"
     fi
     docker network create ${v6settings} --subnet="${DIND_SUBNET}/${DIND_SUBNET_SIZE}" --gateway="${dind_ip_base}1" kubeadm-dind-net >/dev/null
   fi
@@ -511,6 +512,7 @@ function dind::ensure-volume {
 
 function dind::ensure-dns {
     if [[ ${IP_MODE} = "ipv6" ]]; then
+        dind::step "Setting up bind9 container"
         if ! docker inspect bind9 >&/dev/null; then
 	    local bind9_path=/tmp/bind9
 	    rm -rf ${bind9_path}
@@ -549,7 +551,7 @@ BIND9_EOF
 		   --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv6.conf.all.forwarding=1 \
 		   --privileged=true --ip6 ${dns_server} --dns ${dns_server} \
 		   -v ${bind9_path}/conf/named.conf:/etc/bind/named.conf \
-		   resystit/bind9:latest >/dev/null
+		   diverdane/bind9:latest >/dev/null
 	    ipv4_addr="$(docker exec bind9 ip addr list eth0 | grep "inet" | awk '$1 == "inet" {print $2}')"
 	    docker exec bind9 ip addr del ${ipv4_addr} dev eth0
 	    docker exec bind9 ip -6 route add ${DNS64_PREFIX_CIDR} via ${LOCAL_NAT64_SERVER}
@@ -562,18 +564,18 @@ function dind::ensure-nat {
         if ! docker ps | grep tayga >&/dev/null; then
             docker run -d --name tayga --hostname tayga --net kubeadm-dind-net --label mirantis.kubeadm_dind_cluster \
 		   --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv6.conf.all.forwarding=1 \
-		   --privileged=true --ip 172.18.0.200 --ip6 ${LOCAL_NAT64_SERVER} --dns ${REMOTE_DNS64_V4SERVER} --dns ${dns_server} \
-		   -e TAYGA_CONF_PREFIX=${DNS64_PREFIX_CIDR} -e TAYGA_CONF_IPV4_ADDR=172.18.0.200 \
+		   --privileged=true --ip 172.20.0.200 --ip6 ${LOCAL_NAT64_SERVER} --dns ${REMOTE_DNS64_V4SERVER} --dns ${dns_server} \
+		   -e TAYGA_CONF_PREFIX=${DNS64_PREFIX_CIDR} -e TAYGA_CONF_IPV4_ADDR=172.20.0.200 -e TAYGA_CONF_DYNAMIC_POOL=172.20.0.128/25 \
 		   danehans/tayga:latest >/dev/null
 	    # Need to check/create, as "clean" may remove route
-	    local route="$(ip route | egrep "^172.18.0.128/25")"
+	    local route="$(ip route | egrep "^172.20.0.128/25")"
 	    if [[ -z "${route}" ]]; then
 		if [[ ${GCE_HOSTED} ]]; then
-		    docker-machine ssh k8s-dind sudo ip route add 172.18.0.128/25 via 172.18.0.200
+		    docker-machine ssh k8s-dind sudo ip route add 172.20.0.128/25 via 172.20.0.200
     elif [[ -z ${using_linuxdocker} ]]; then
         :
 		else
-		    docker run --net=host --rm --privileged ${busybox_image} ip route add 172.18.0.128/25 via 172.18.0.200
+		    docker run --net=host --rm --privileged ${busybox_image} ip route add 172.20.0.128/25 via 172.20.0.200
 		fi
 	    fi
 	fi
@@ -661,6 +663,7 @@ function dind::run {
   # in case of the source build
 
   # Start the new container.
+  dind::step "Docker running DIND container:" "${container_name}"
   docker run \
 	 -e IP_MODE="${IP_MODE}" \
          -e KUBEADM_SOURCE="${KUBEADM_SOURCE}" \
@@ -671,6 +674,7 @@ function dind::run {
          --hostname "${container_name}" \
          -l mirantis.kubeadm_dind_cluster \
          -v ${volume_name}:/dind \
+         -v /tmp:/var/lib/docker \
          ${opts[@]+"${opts[@]}"} \
          "${DIND_IMAGE}" \
          ${args[@]+"${args[@]}"}
@@ -992,7 +996,7 @@ function dind::setup_external_access_on_host {
     return
   fi
   local main_if=`ip route | grep default | awk '{print $5}'`
-  local bridge_if=`ip route | grep 172.18.0.0 | awk '{print $3}'`
+  local bridge_if=`ip route | grep 172.20.0.0 | awk '{print $3}'`
   docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -t nat -A POSTROUTING -o $main_if -j MASQUERADE
   if [[ -n "$bridge_if" ]]; then
     docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -A FORWARD -i $bridge_if -j ACCEPT
@@ -1008,7 +1012,7 @@ function dind::remove_external_access_on_host {
   fi
   local have_rule
   local main_if="$(ip route | grep default | awk '{print $5}')"
-  local bridge_if="$(ip route | grep 172.18.0.0 | awk '{print $3}')"
+  local bridge_if="$(ip route | grep 172.20.0.0 | awk '{print $3}')"
 
   have_rule="$(docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -S -t nat | grep "\-o $main_if" || true)"
   if [[ -n "$have_rule" ]]; then
@@ -1453,6 +1457,7 @@ function dind::split-dump64 {
 }
 
 function dind::proxy {
+  dind::step "Setting HTTP Proxy env vars"
   local container_id="$1"
   if [[ ${DIND_CA_CERT_URL} ]] ; then
     dind::step "+ Adding certificate on ${container_id}"
@@ -1471,12 +1476,14 @@ function dind::proxy {
       if [[ "${DIND_NO_PROXY}" ]] ;    then proxy_env+="\"NO_PROXY=${DIND_NO_PROXY}\" "; fi
     fi
     docker exec -i ${container_id} /bin/sh -c "cat > /etc/systemd/system/docker.service.d/30-proxy.conf" <<< "${proxy_env}"
+    dind::step "Restarting docker for container ID" "${container_id}"
     docker exec ${container_id} systemctl daemon-reload
     docker exec ${container_id} systemctl restart docker
   fi
 }
 
 function dind::custom-docker-opts {
+  dind::step "Setting custom docker opts"
   local container_id="$1"
   local -a jq=()
   if [ ! -f ${DIND_DAEMON_JSON_FILE} ] ; then
@@ -1495,8 +1502,10 @@ function dind::custom-docker-opts {
   if [[ ${jq} ]] ; then
     local json=$(IFS="+"; echo "${jq[*]}")
     docker exec -i ${container_id} /bin/sh -c "mkdir -p /etc/docker && jq -n '${json}' > /etc/docker/daemon.json"
-    docker exec ${container_id} systemctl daemon-reload
-    docker exec ${container_id} systemctl restart docker
+    dind::step "TEMPORARILY DISABLED: Restarting docker for container ID" "${container_id}"
+    #dind::step "Restarting docker for container ID" "${container_id}"
+    #docker exec ${container_id} systemctl daemon-reload
+    #docker exec ${container_id} systemctl restart docker
   fi
 }
 
@@ -1517,6 +1526,24 @@ case "${1:-}" in
     else
       dind::restore
     fi
+    ;;
+  up-shell)
+    if [[ ! ( ${DIND_IMAGE} =~ local ) && ! ${DIND_SKIP_PULL:-} ]]; then
+      dind::step "Making sure DIND image is up to date"
+      docker pull "${DIND_IMAGE}" >&2
+    fi
+
+    dind::prepare-sys-mounts
+    dind::ensure-kubectl
+    if [[ ${SKIP_SNAPSHOT} ]]; then
+      force_make_binaries=y dind::up
+    elif ! dind::check-for-snapshot; then
+      force_make_binaries=y dind::up
+      dind::snapshot
+    else
+      dind::restore
+    fi
+    /bin/bash
     ;;
   reup)
     dind::prepare-sys-mounts
@@ -1588,6 +1615,7 @@ case "${1:-}" in
   *)
     echo "usage:" >&2
     echo "  $0 up" >&2
+    echo "  $0 up-shell" >&2
     echo "  $0 reup" >&2
     echo "  $0 down" >&2
     echo "  $0 init kubeadm-args..." >&2

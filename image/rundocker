@@ -65,7 +65,8 @@ modprobe overlay || true
 storage_opts=
 if grep -q '[[:blank:]]overlay[[:blank:]]*' /proc/filesystems; then
     # --storage-opt overlay2.override_kernel_check=true is needed for CentOS systems
-    storage_opts="--storage-driver=overlay2 --storage-opt overlay2.override_kernel_check=true"
+    #storage_opts="--storage-driver=overlay2 --storage-opt overlay2.override_kernel_check=true"
+    storage_opts=""
 fi
 
 # FIXME: this fix really concerns kubelet, so perhaps it should go
