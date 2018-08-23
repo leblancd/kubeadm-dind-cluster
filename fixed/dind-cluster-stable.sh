@@ -1777,6 +1777,24 @@ case "${1:-}" in
       dind::restore
     fi
     ;;
+  up-shell)
+    if [[ ! ( ${DIND_IMAGE} =~ local ) && ! ${DIND_SKIP_PULL:-} ]]; then
+      dind::step "Making sure DIND image is up to date"
+      docker pull "${DIND_IMAGE}" >&2
+    fi
+
+    dind::prepare-sys-mounts
+    dind::ensure-kubectl
+    if [[ ${SKIP_SNAPSHOT} ]]; then
+      force_make_binaries=y dind::up
+    elif ! dind::check-for-snapshot; then
+      force_make_binaries=y dind::up
+      dind::snapshot
+    else
+      dind::restore
+    fi
+    /bin/bash
+    ;;
   reup)
     dind::prepare-sys-mounts
     dind::ensure-kubectl
