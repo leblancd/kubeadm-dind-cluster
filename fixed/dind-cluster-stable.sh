@@ -49,7 +49,8 @@ if [[ $(uname) == Linux && -z ${DOCKER_HOST:-} ]]; then
     using_local_linuxdocker=1
 fi
 
-EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:stable
+#EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:stable
+EMBEDDED_CONFIG=y;DIND_IMAGE=diverdane/kubeadm-dind-cluster:robs_storage_driver_fix
 
 function dind::find-free-ipv4-subnet() {
   local maxIP anAddressInNewSubnet
