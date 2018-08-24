@@ -73,7 +73,6 @@ if [ "$DIND_STORAGE_DRIVER" == "overlay2" ]; then
     fi
 else
     DIND_STORAGE_OPTS="--storage-driver=${DIND_STORAGE_DRIVER}"
-    storage_opts="${DIND_STORAGE_OPTS}"
 fi
 
 # FIXME: this fix really concerns kubelet, so perhaps it should go
