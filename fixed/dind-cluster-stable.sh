@@ -404,6 +404,7 @@ E2E_REPORT_DIR="${E2E_REPORT_DIR:-}"
 DIND_NO_PARALLEL_E2E="${DIND_NO_PARALLEL_E2E:-}"
 DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 DIND_STORAGE_DRIVER="${DIND_STORAGE_DRIVER:-overlay2}"
+DIND_DOCKER_VOLUME="${DIND_DOCKER_VOLUME:-}"
 
 DIND_CA_CERT_URL="${DIND_CA_CERT_URL:-}"
 DIND_PROPAGATE_HTTP_PROXY="${DIND_PROPAGATE_HTTP_PROXY:-}"
@@ -865,7 +866,15 @@ function dind::run {
   
   local -a args=("systemd.setenv=CNI_PLUGIN=${CNI_PLUGIN}")
   args+=("systemd.setenv=IP_MODE=${IP_MODE}")
-  args+=("systemd.setenv=DIND_STORAGE_DRIVER=${DIND_STORAGE_DRIVER}")
+  #args+=("systemd.setenv=DIND_STORAGE_DRIVER=${DIND_STORAGE_DRIVER}")
+
+  if [[ ! ${DIND_DOCKER_VOLUME} ]]; then
+    #  opts+=(--volume /dind/docker)
+    #  args+=("systemd.setenv=DIND_STORAGE_DRIVER=local")
+    #  #opts+=(--volume ${DIND_DOCKER_VOLUME}:/dind/docker)
+    #  #opts+=(--volume ${DIND_DOCKER_VOLUME}:/var/lib/docker)
+    args+=("systemd.setenv=DIND_STORAGE_DRIVER=${DIND_STORAGE_DRIVER}")
+  fi
 
   if [[ ${IP_MODE} != "ipv4" ]]; then
     opts+=(--sysctl net.ipv6.conf.all.disable_ipv6=0)
