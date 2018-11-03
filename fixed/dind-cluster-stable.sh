@@ -49,7 +49,7 @@ if [[ $(uname) == Linux && -z ${DOCKER_HOST:-} ]]; then
     using_local_linuxdocker=1
 fi
 
-EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:stable
+EMBEDDED_CONFIG=y;DIND_IMAGE=diverdane/kubeadm-dind-cluster:k8s_bin_dir
 
 # dind::localhost provides the local host IP based on the address family used for service subnet.
 function dind::localhost() {
@@ -486,6 +486,11 @@ done
 DIND_IMAGE="${DIND_IMAGE:-}"
 BUILD_KUBEADM="${BUILD_KUBEADM:-}"
 BUILD_HYPERKUBE="${BUILD_HYPERKUBE:-}"
+DIND_K8S_BIN_DIR="${DIND_K8S_BIN_DIR:-}"
+if [[ ! -z ${DIND_K8S_BIN_DIR} ]]; then
+  BUILD_KUBEADM=""
+  BUILD_HYPERKUBE=""
+fi
 KUBEADM_SOURCE="${KUBEADM_SOURCE-}"
 HYPERKUBE_SOURCE="${HYPERKUBE_SOURCE-}"
 NUM_NODES=${NUM_NODES:-2}
@@ -1019,6 +1024,9 @@ function dind::run {
 
   dind::step "Starting DIND container:" "${container_name}"
 
+  if [[ ${DIND_K8S_BIN_DIR} ]]; then
+      opts+=(-v ${DIND_K8S_BIN_DIR}:/k8s)
+  fi
   if [[ ! ${using_linuxkit} ]]; then
     opts+=(-v /boot:/boot -v /lib/modules:/lib/modules)
   fi
